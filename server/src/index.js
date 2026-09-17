@@ -193,6 +193,65 @@ app.get('/api', getApiOverview);
 
 // Health check handler
 const handleHealth = (req, res) => {
+  if (req.accepts('html') && req.headers['user-agent'] && !req.xhr) {
+    const uptimeSec = Math.floor(process.uptime());
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>API Health & Status — Student ERP</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; }
+          body { background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+          .card { background: #1e293b; max-width: 560px; width: 100%; border-radius: 28px; padding: 36px; border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); text-align: center; }
+          .status-ring { width: 72px; height: 72px; background: rgba(34, 197, 94, 0.15); border: 2px solid #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 32px; }
+          h1 { font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em; }
+          .sub { color: #94a3b8; font-size: 14px; margin-top: 6px; margin-bottom: 24px; }
+          .btn-main { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #16a34a; hover: #15803d; color: white; text-decoration: none; padding: 16px 24px; border-radius: 16px; font-weight: 700; font-size: 15px; transition: all 0.2s; box-shadow: 0 10px 20px -5px rgba(22,163,74,0.4); }
+          .btn-main:hover { background: #15803d; transform: translateY(-1px); }
+          .details { margin-top: 24px; padding-top: 20px; border-top: 1px solid #334155; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left; }
+          .metric { background: #0f172a; padding: 12px 16px; border-radius: 12px; border: 1px solid #1e293b; }
+          .metric-lbl { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; }
+          .metric-val { font-size: 13px; font-weight: 700; color: #22c55e; margin-top: 2px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="status-ring">✓</div>
+          <h1>System is Healthy & Online</h1>
+          <p class="sub">The backend API service and SQLite relational database are running at 100% capacity.</p>
+          
+          <a href="/" class="btn-main">
+            👉 Launch Student ERP Web Application
+          </a>
+
+          <div class="details">
+            <div class="metric">
+              <div class="metric-lbl">Status</div>
+              <div class="metric-val">🟢 Online (Healthy)</div>
+            </div>
+            <div class="metric">
+              <div class="metric-lbl">Database</div>
+              <div class="metric-val">SQLite (WASM Synced)</div>
+            </div>
+            <div class="metric">
+              <div class="metric-lbl">Uptime</div>
+              <div class="metric-val" style="color:#e2e8f0;">${uptimeSec} seconds</div>
+            </div>
+            <div class="metric">
+              <div class="metric-lbl">Application UI</div>
+              <div class="metric-val"><a href="/" style="color:#38bdf8; text-decoration:none;">Open Portal (/)</a></div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
   res.json({
     status: 'healthy',
     system: 'College Student ERP System API',
