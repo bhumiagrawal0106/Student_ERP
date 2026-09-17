@@ -178,7 +178,13 @@ const getApiOverview = (req, res) => {
   });
 };
 
-app.get('/', getApiOverview);
+const clientDistPath = path.resolve(__dirname, '../../client/dist');
+const hasClientBuild = fs.existsSync(clientDistPath);
+
+if (hasClientBuild) {
+  app.use(express.static(clientDistPath));
+}
+
 app.get('/api', getApiOverview);
 
 // Health check handler
@@ -190,9 +196,9 @@ const handleHealth = (req, res) => {
     timestamp: new Date().toISOString(),
     database: 'connected (SQLite relational engine)',
     endpoints: {
-      webApp: 'http://localhost:3000',
-      apiDocs: 'http://localhost:5000/api',
-      auth: 'http://localhost:5000/api/auth/login'
+      webApp: hasClientBuild ? '/' : 'http://localhost:3000',
+      apiDocs: '/api',
+      auth: '/api/auth/login'
     }
   });
 };
@@ -204,6 +210,15 @@ app.get('/health', handleHealth);
 app.use('/api/*', (req, res) => {
   res.status(404).json({ message: `API route ${req.method} ${req.originalUrl} not found.` });
 });
+
+if (!hasClientBuild) {
+  app.get('/', getApiOverview);
+} else {
+  // SPA fallback for all frontend client routes (e.g. /login, /student, /admin)
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
 
 // Central error handler
 app.use((err, req, res, next) => {
