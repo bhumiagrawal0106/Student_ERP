@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
 import { CONFIG } from '../config/index.js';
 
 // Ensure data and uploads directories exist
@@ -12,11 +12,41 @@ if (!fs.existsSync(CONFIG.UPLOADS_DIR)) {
   fs.mkdirSync(CONFIG.UPLOADS_DIR, { recursive: true });
 }
 
-export const db = new Database(CONFIG.DB_PATH);
+// Initialize SQL.js engine (pure WebAssembly, zero C++ compilation dependencies)
+const SQL = await initSqlJs();
 
-// Configure SQLite for high performance and strict relational integrity
-db.exec('PRAGMA foreign_keys = ON;');
-db.exec('PRAGMA journal_mode = WAL;');
+let dbInstance;
+if (fs.existsSync(CONFIG.DB_PATH)) {
+  try {
+    const fileBuffer = fs.readFileSync(CONFIG.DB_PATH);
+    dbInstance = new SQL.Database(fileBuffer);
+  } catch (err) {
+    console.warn('Could not read existing SQLite file, creating new database instance:', err.message);
+    dbInstance = new SQL.Database();
+  }
+} else {
+  dbInstance = new SQL.Database();
+}
+
+// Configure SQLite pragmas
+try {
+  dbInstance.exec('PRAGMA foreign_keys = ON;');
+} catch (e) {
+  // Pragma ignore if not supported
+}
+
+/**
+ * Persists the in-memory SQLite database to disk.
+ */
+export function saveDb() {
+  try {
+    const data = dbInstance.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(CONFIG.DB_PATH, buffer);
+  } catch (err) {
+    console.error('Error saving database to file:', err.message);
+  }
+}
 
 /**
  * Executes a query that returns multiple rows.
@@ -25,8 +55,17 @@ db.exec('PRAGMA journal_mode = WAL;');
  * @returns {Array}
  */
 export function query(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return Array.isArray(params) ? stmt.all(...params) : stmt.all(params);
+  const stmt = dbInstance.prepare(sql);
+  const normalizedParams = Array.isArray(params) ? params : (params ? [params] : []);
+  if (normalizedParams.length > 0) {
+    stmt.bind(normalizedParams);
+  }
+  const results = [];
+  while (stmt.step()) {
+    results.push(stmt.getAsObject());
+  }
+  stmt.free();
+  return results;
 }
 
 /**
@@ -36,9 +75,17 @@ export function query(sql, params = []) {
  * @returns {Object|null}
  */
 export function get(sql, params = []) {
-  const stmt = db.prepare(sql);
-  const result = Array.isArray(params) ? stmt.get(...params) : stmt.get(params);
-  return result || null;
+  const stmt = dbInstance.prepare(sql);
+  const normalizedParams = Array.isArray(params) ? params : (params ? [params] : []);
+  if (normalizedParams.length > 0) {
+    stmt.bind(normalizedParams);
+  }
+  let result = null;
+  if (stmt.step()) {
+    result = stmt.getAsObject();
+  }
+  stmt.free();
+  return result;
 }
 
 /**
@@ -48,8 +95,21 @@ export function get(sql, params = []) {
  * @returns {{ changes: number, lastInsertRowid: number|bigint }}
  */
 export function run(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return Array.isArray(params) ? stmt.run(...params) : stmt.run(params);
+  const stmt = dbInstance.prepare(sql);
+  const normalizedParams = Array.isArray(params) ? params : (params ? [params] : []);
+  if (normalizedParams.length > 0) {
+    stmt.bind(normalizedParams);
+  }
+  stmt.step();
+  stmt.free();
+
+  const lastIdRes = dbInstance.exec('SELECT last_insert_rowid() AS id;');
+  const lastInsertRowid = lastIdRes[0]?.values[0]?.[0] ?? 0;
+  const changesRes = dbInstance.exec('SELECT changes() AS changes;');
+  const changes = changesRes[0]?.values[0]?.[0] ?? 0;
+
+  saveDb();
+  return { changes, lastInsertRowid };
 }
 
 /**
@@ -57,7 +117,10 @@ export function run(sql, params = []) {
  * @param {string} sql 
  */
 export function exec(sql) {
-  return db.exec(sql);
+  const res = dbInstance.exec(sql);
+  saveDb();
+  return res;
 }
 
-export default { db, query, get, run, exec };
+export const db = dbInstance;
+export default { db: dbInstance, query, get, run, exec, saveDb };
