@@ -16,7 +16,13 @@ import {
   RotateCcw,
   Layers,
   Sparkles,
-  Filter
+  Filter,
+  UserPlus,
+  Trash2,
+  Key,
+  Shield,
+  Mail,
+  Phone
 } from 'lucide-react';
 
 export default function AdminPortal() {
@@ -51,6 +57,31 @@ export default function AdminPortal() {
     fatherMobile: '',
     hostelType: 'Day Scholar',
   });
+
+  const [showAddFacultyModal, setShowAddFacultyModal] = useState(false);
+  const [newFaculty, setNewFaculty] = useState({
+    employeeId: '',
+    name: '',
+    gender: 'Male',
+    department: 'Computer Science & Engineering',
+    designation: 'Assistant Professor',
+    email: '',
+    mobile: '',
+    isHod: false,
+    hodDepartment: 'Computer Science & Engineering',
+  });
+
+  const [showAddMentorModal, setShowAddMentorModal] = useState(false);
+  const [newMentor, setNewMentor] = useState({
+    branch: 'Computer Science & Engineering',
+    semester: 1,
+    section: 'A',
+    primaryMentorId: '',
+    secondaryMentorId: '',
+  });
+
+  const [facultySearch, setFacultySearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
 
   const [showAddNoticeModal, setShowAddNoticeModal] = useState(false);
   const [newNotice, setNewNotice] = useState({
@@ -134,6 +165,99 @@ export default function AdminPortal() {
     }
   };
 
+  // Add Faculty Handler
+  const handleCreateFaculty = async (e) => {
+    e.preventDefault();
+    setMsg({ type: '', text: '' });
+    try {
+      const res = await api.post('/admin/faculty', newFaculty);
+      setMsg({
+        type: 'success',
+        text: `Faculty created! Default password: ${res.data.defaultPassword} (Employee ID + @123)`,
+      });
+      setShowAddFacultyModal(false);
+      setNewFaculty({
+        employeeId: '',
+        name: '',
+        gender: 'Male',
+        department: 'Computer Science & Engineering',
+        designation: 'Assistant Professor',
+        email: '',
+        mobile: '',
+        isHod: false,
+        hodDepartment: 'Computer Science & Engineering',
+      });
+      const r = await api.get('/admin/faculty');
+      setFaculty(r.data.faculty || []);
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to create faculty member.' });
+    }
+  };
+
+  // Reset Faculty Password
+  const handleResetFacultyPassword = async (empId) => {
+    try {
+      const res = await api.post(`/admin/faculty/${empId}/reset-password`);
+      setMsg({
+        type: 'success',
+        text: `Password for ${empId} reset to default: "${res.data.defaultPassword}"`,
+      });
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to reset faculty password.' });
+    }
+  };
+
+  // Delete Faculty
+  const handleDeleteFaculty = async (empId, name) => {
+    if (!window.confirm(`Are you sure you want to remove faculty member ${name} (${empId})?`)) return;
+    try {
+      await api.delete(`/admin/faculty/${empId}`);
+      setMsg({ type: 'success', text: `Faculty ${name} (${empId}) removed successfully.` });
+      const r = await api.get('/admin/faculty');
+      setFaculty(r.data.faculty || []);
+      const mr = await api.get('/admin/mentors');
+      setMentors(mr.data.mentors || []);
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to delete faculty member.' });
+    }
+  };
+
+  // Assign Class Mentor Pair
+  const handleAssignMentors = async (e) => {
+    e.preventDefault();
+    setMsg({ type: '', text: '' });
+    if (!newMentor.primaryMentorId || !newMentor.secondaryMentorId) {
+      setMsg({ type: 'error', text: 'Please select both Primary and Secondary mentors.' });
+      return;
+    }
+    if (newMentor.primaryMentorId === newMentor.secondaryMentorId) {
+      setMsg({ type: 'error', text: 'Primary and Secondary mentors must be different faculty members.' });
+      return;
+    }
+    try {
+      await api.post('/admin/mentors', newMentor);
+      setMsg({ type: 'success', text: `Dual Mentors assigned for ${newMentor.branch} Sem ${newMentor.semester} Sec ${newMentor.section}!` });
+      setShowAddMentorModal(false);
+      const mr = await api.get('/admin/mentors');
+      setMentors(mr.data.mentors || []);
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to assign class mentors.' });
+    }
+  };
+
+  // Delete Mentor Assignment
+  const handleDeleteMentor = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this mentor pairing?')) return;
+    try {
+      await api.delete(`/admin/mentors/${id}`);
+      setMsg({ type: 'success', text: 'Mentor assignment deleted successfully.' });
+      const mr = await api.get('/admin/mentors');
+      setMentors(mr.data.mentors || []);
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to remove mentor assignment.' });
+    }
+  };
+
   // Publish Notice
   const handleCreateNotice = async (e) => {
     e.preventDefault();
@@ -184,6 +308,15 @@ export default function AdminPortal() {
         s.roll_number.toLowerCase().includes(studentSearch.toLowerCase())
     );
 
+  const filteredFaculty = faculty
+    .filter((f) => !deptFilter || f.department === deptFilter)
+    .filter(
+      (f) =>
+        f.name.toLowerCase().includes(facultySearch.toLowerCase()) ||
+        f.employee_id.toLowerCase().includes(facultySearch.toLowerCase()) ||
+        (f.designation && f.designation.toLowerCase().includes(facultySearch.toLowerCase()))
+    );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -214,17 +347,24 @@ export default function AdminPortal() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setShowAddStudentModal(true)}
-            className="py-2.5 px-4 rounded-xl bg-forest-600 hover:bg-forest-500 text-white font-bold text-xs shadow-md transition flex items-center gap-2"
+            className="py-2.5 px-3.5 rounded-xl bg-forest-600 hover:bg-forest-500 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
             <span>Add Student</span>
           </button>
           <button
+            onClick={() => setShowAddFacultyModal(true)}
+            className="py-2.5 px-3.5 rounded-xl bg-forest-700 hover:bg-forest-600 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add Faculty</span>
+          </button>
+          <button
             onClick={() => setShowAddNoticeModal(true)}
-            className="py-2.5 px-4 rounded-xl bg-earth-700 hover:bg-earth-600 text-white font-bold text-xs shadow-md transition flex items-center gap-2"
+            className="py-2.5 px-3.5 rounded-xl bg-earth-700 hover:bg-earth-600 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
           >
             <Bell className="w-4 h-4" />
             <span>Post Notice</span>
@@ -444,67 +584,184 @@ export default function AdminPortal() {
           
           {/* Mentors Pairing List */}
           <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-              Class Mentors Pairing System (Dual Mentorship)
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Pairs of Primary and Secondary mentors assigned to each branch, semester, and section. Supports Male+Male, Female+Female, or Male+Female pairings.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white mb-0.5">
+                  Class Mentors Pairing System (Dual Mentorship)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Pairs of Primary and Secondary mentors assigned to each branch, semester, and section. Supports Male+Male, Female+Female, or Male+Female pairings.
+                </p>
+              </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {mentors.map((m) => (
-                <div key={m.id} className="p-4 rounded-2xl bg-earth-50/50 dark:bg-slate-800 border border-earth-200/70 dark:border-slate-700 text-xs">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">
-                      Sem {m.semester} - Sec {m.section}
-                    </span>
-                    <Badge variant="earth">{m.branch}</Badge>
-                  </div>
-                  <div className="space-y-1.5 pt-2 border-t border-earth-200/60 dark:border-slate-700">
-                    <div>
-                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Mentor 1 (Primary):</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{m.primary_mentor_name}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Mentor 2 (Secondary):</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{m.secondary_mentor_name}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <button
+                type="button"
+                onClick={() => setShowAddMentorModal(true)}
+                className="py-2 px-3.5 rounded-xl bg-forest-700 hover:bg-forest-800 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5 shrink-0"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Assign Mentor Pair</span>
+              </button>
             </div>
+
+            {mentors.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-xs bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                No mentor pairings assigned yet. Click "Assign Mentor Pair" to configure.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {mentors.map((m) => (
+                  <div key={m.id} className="p-4 rounded-2xl bg-earth-50/50 dark:bg-slate-800 border border-earth-200/70 dark:border-slate-700 text-xs relative group">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-sm text-slate-900 dark:text-white">
+                        Sem {m.semester} - Sec {m.section}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="earth">{m.branch}</Badge>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMentor(m.id)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition opacity-80 group-hover:opacity-100"
+                          title="Remove mentor assignment"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 pt-2 border-t border-earth-200/60 dark:border-slate-700">
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Mentor 1 (Primary):</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {m.primary_mentor_name || m.primary_name} ({m.primary_mentor_id})
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Mentor 2 (Secondary):</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {m.secondary_mentor_name || m.secondary_name} ({m.secondary_mentor_id})
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Faculty Master List */}
           <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">
-              Faculty Master Directory
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Faculty Master Directory ({faculty.length})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Manage professors, assistant professors, and HOD credentials.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, ID or role..."
+                    value={facultySearch}
+                    onChange={(e) => setFacultySearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-forest-600 outline-none bg-white"
+                  />
+                </div>
+
+                <select
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white font-medium"
+                >
+                  <option value="">All Departments</option>
+                  <option value="Computer Science & Engineering">CSE</option>
+                  <option value="Information Technology">IT</option>
+                  <option value="Electronics & Communication">ECE</option>
+                  <option value="Mechanical Engineering">ME</option>
+                  <option value="Civil Engineering">CE</option>
+                  <option value="Applied Sciences & Humanities">Applied Sciences</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddFacultyModal(true)}
+                  className="py-1.5 px-3.5 rounded-xl bg-forest-700 hover:bg-forest-800 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Add Faculty</span>
+                </button>
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
                 <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 uppercase font-semibold text-[11px] border-b border-slate-200 dark:border-slate-800">
                   <tr>
                     <th className="py-3 px-4">Employee ID</th>
-                    <th className="py-3 px-4">Name</th>
+                    <th className="py-3 px-4">Faculty Name</th>
                     <th className="py-3 px-4">Gender</th>
                     <th className="py-3 px-4">Department</th>
                     <th className="py-3 px-4">Designation</th>
+                    <th className="py-3 px-4">Contact</th>
                     <th className="py-3 px-4">HOD Status</th>
+                    <th className="py-3 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {faculty.map((f) => (
-                    <tr key={f.employee_id} className="hover:bg-slate-50/60 transition">
-                      <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">{f.employee_id}</td>
-                      <td className="py-3 px-4 font-semibold">{f.name}</td>
-                      <td className="py-3 px-4">{f.gender}</td>
-                      <td className="py-3 px-4">{f.department}</td>
-                      <td className="py-3 px-4">{f.designation}</td>
-                      <td className="py-3 px-4">
-                        {f.is_hod ? <Badge variant="terracotta">HOD</Badge> : <Badge variant="default">Faculty</Badge>}
+                  {filteredFaculty.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-10 text-slate-400">
+                        No faculty members match the filter criteria.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredFaculty.map((f) => (
+                      <tr key={f.employee_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">{f.employee_id}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">{f.name}</td>
+                        <td className="py-3 px-4">{f.gender}</td>
+                        <td className="py-3 px-4">{f.department}</td>
+                        <td className="py-3 px-4">{f.designation}</td>
+                        <td className="py-3 px-4">
+                          <div className="text-[11px] space-y-0.5">
+                            <div className="text-slate-600 dark:text-slate-300">{f.email}</div>
+                            <div className="text-slate-400 font-mono">{f.mobile}</div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {f.is_hod ? (
+                            <Badge variant="terracotta">HOD ({f.hod_department || f.department})</Badge>
+                          ) : (
+                            <Badge variant="default">Faculty</Badge>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleResetFacultyPassword(f.employee_id)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-forest-700 hover:bg-forest-50 dark:hover:bg-slate-700 transition"
+                              title={`Reset password to ${f.employee_id}@123`}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFaculty(f.employee_id, f.name)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition"
+                              title="Delete faculty member"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -935,6 +1192,271 @@ export default function AdminPortal() {
                   className="py-2 px-5 rounded-xl bg-forest-700 hover:bg-forest-800 text-white text-xs font-bold shadow-sm"
                 >
                   Save Subject
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD FACULTY */}
+      {showAddFacultyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-forest-700" />
+              <span>Add New Faculty Member</span>
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Credentials will be generated automatically: <strong>{newFaculty.employeeId || 'EMPLOYEE_ID'}</strong> / Default Password: <strong>{newFaculty.employeeId ? `${newFaculty.employeeId}@123` : 'ID@123'}</strong>
+            </p>
+
+            <form onSubmit={handleCreateFaculty} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Employee ID</label>
+                  <input
+                    type="text"
+                    required
+                    value={newFaculty.employeeId}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, employeeId: e.target.value.toUpperCase().trim() })}
+                    placeholder="e.g. FAC103"
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newFaculty.name}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, name: e.target.value })}
+                    placeholder="e.g. Dr. Ramesh Gupta"
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Gender</label>
+                  <select
+                    value={newFaculty.gender}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, gender: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Designation</label>
+                  <select
+                    value={newFaculty.designation}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, designation: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+                  >
+                    <option value="Professor">Professor</option>
+                    <option value="Associate Professor">Associate Professor</option>
+                    <option value="Assistant Professor">Assistant Professor</option>
+                    <option value="Lecturer">Lecturer</option>
+                    <option value="Guest Faculty">Guest Faculty</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Department</label>
+                <select
+                  value={newFaculty.department}
+                  onChange={(e) => setNewFaculty({ ...newFaculty, department: e.target.value, hodDepartment: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+                >
+                  <option value="Computer Science & Engineering">Computer Science & Engineering (CSE)</option>
+                  <option value="Information Technology">Information Technology (IT)</option>
+                  <option value="Electronics & Communication">Electronics & Communication (ECE)</option>
+                  <option value="Mechanical Engineering">Mechanical Engineering (ME)</option>
+                  <option value="Civil Engineering">Civil Engineering (CE)</option>
+                  <option value="Applied Sciences & Humanities">Applied Sciences & Humanities</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Official Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={newFaculty.email}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, email: e.target.value })}
+                    placeholder="e.g. ramesh.gupta@college.edu"
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Mobile Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={newFaculty.mobile}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, mobile: e.target.value })}
+                    placeholder="e.g. 9876543210"
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={newFaculty.isHod}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, isHod: e.target.checked })}
+                    className="rounded border-slate-300 text-forest-700 focus:ring-forest-600"
+                  />
+                  <span>Assign as Head of Department (HOD)</span>
+                </label>
+                {newFaculty.isHod && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">HOD Department Jurisdiction</label>
+                    <select
+                      value={newFaculty.hodDepartment}
+                      onChange={(e) => setNewFaculty({ ...newFaculty, hodDepartment: e.target.value })}
+                      className="w-full px-2.5 py-1 rounded-lg border border-slate-300 text-xs bg-white"
+                    >
+                      <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+                      <option value="Information Technology">Information Technology</option>
+                      <option value="Electronics & Communication">Electronics & Communication</option>
+                      <option value="Mechanical Engineering">Mechanical Engineering</option>
+                      <option value="Civil Engineering">Civil Engineering</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddFacultyModal(false)}
+                  className="py-2 px-4 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="py-2 px-5 rounded-xl bg-forest-700 hover:bg-forest-800 text-white text-xs font-bold shadow-sm"
+                >
+                  Register Faculty Member
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASSIGN MENTOR PAIR */}
+      {showAddMentorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-forest-700" />
+              <span>Assign Class Mentor Pair (Dual Mentorship)</span>
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Supports Male+Male, Female+Female, or Male+Female pairings for designated branch, semester, and section.
+            </p>
+
+            <form onSubmit={handleAssignMentors} className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1">
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Semester</label>
+                  <select
+                    value={newMentor.semester}
+                    onChange={(e) => setNewMentor({ ...newMentor, semester: Number(e.target.value) })}
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                      <option key={s} value={s}>Semester {s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Section</label>
+                  <select
+                    value={newMentor.section}
+                    onChange={(e) => setNewMentor({ ...newMentor, section: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+                  >
+                    <option value="A">Section A</option>
+                    <option value="B">Section B</option>
+                    <option value="C">Section C</option>
+                    <option value="D">Section D</option>
+                  </select>
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Branch</label>
+                  <select
+                    value={newMentor.branch}
+                    onChange={(e) => setNewMentor({ ...newMentor, branch: e.target.value })}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs bg-white"
+                  >
+                    <option value="Computer Science & Engineering">CSE</option>
+                    <option value="Information Technology">IT</option>
+                    <option value="Electronics & Communication">ECE</option>
+                    <option value="Mechanical Engineering">ME</option>
+                    <option value="Civil Engineering">CE</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Primary Mentor (Mentor 1)</label>
+                <select
+                  required
+                  value={newMentor.primaryMentorId}
+                  onChange={(e) => setNewMentor({ ...newMentor, primaryMentorId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white"
+                >
+                  <option value="">Select Primary Mentor...</option>
+                  {faculty.map((f) => (
+                    <option key={f.employee_id} value={f.employee_id}>
+                      {f.name} ({f.employee_id}) — {f.department} ({f.gender})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-0.5">Secondary Mentor (Mentor 2)</label>
+                <select
+                  required
+                  value={newMentor.secondaryMentorId}
+                  onChange={(e) => setNewMentor({ ...newMentor, secondaryMentorId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white"
+                >
+                  <option value="">Select Secondary Mentor...</option>
+                  {faculty.map((f) => (
+                    <option key={f.employee_id} value={f.employee_id}>
+                      {f.name} ({f.employee_id}) — {f.department} ({f.gender})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMentorModal(false)}
+                  className="py-2 px-4 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="py-2 px-5 rounded-xl bg-forest-700 hover:bg-forest-800 text-white text-xs font-bold shadow-sm"
+                >
+                  Assign Mentors
                 </button>
               </div>
             </form>
