@@ -1,6 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
 import fs from 'fs';
 import path from 'path';
+import Database from 'better-sqlite3';
 import { CONFIG } from '../config/index.js';
 
 // Ensure data and uploads directories exist
@@ -12,7 +12,7 @@ if (!fs.existsSync(CONFIG.UPLOADS_DIR)) {
   fs.mkdirSync(CONFIG.UPLOADS_DIR, { recursive: true });
 }
 
-export const db = new DatabaseSync(CONFIG.DB_PATH);
+export const db = new Database(CONFIG.DB_PATH);
 
 // Configure SQLite for high performance and strict relational integrity
 db.exec('PRAGMA foreign_keys = ON;');
@@ -26,7 +26,7 @@ db.exec('PRAGMA journal_mode = WAL;');
  */
 export function query(sql, params = []) {
   const stmt = db.prepare(sql);
-  return stmt.all(...params);
+  return Array.isArray(params) ? stmt.all(...params) : stmt.all(params);
 }
 
 /**
@@ -37,7 +37,7 @@ export function query(sql, params = []) {
  */
 export function get(sql, params = []) {
   const stmt = db.prepare(sql);
-  const result = stmt.get(...params);
+  const result = Array.isArray(params) ? stmt.get(...params) : stmt.get(params);
   return result || null;
 }
 
@@ -49,7 +49,7 @@ export function get(sql, params = []) {
  */
 export function run(sql, params = []) {
   const stmt = db.prepare(sql);
-  return stmt.run(...params);
+  return Array.isArray(params) ? stmt.run(...params) : stmt.run(params);
 }
 
 /**
